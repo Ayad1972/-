@@ -11,9 +11,28 @@
 - `H:\New Microsoft Excel Worksheet.xlsx`
 - `H:\MFILE.DBF`
 
+## تثبيت Python على Windows (إذا غير موجود)
+
+1. انقر مرتين على:
+
+```bat
+install_python.bat
+```
+
+سيقوم الملف بـ:
+- تثبيت Python تلقائياً
+- إضافته إلى PATH
+- تثبيت المكتبات المطلوبة (`openpyxl`, `dbfread`, `dbf`)
+
+إذا فشل التلقائي، حمّل Python من:
+https://www.python.org/downloads/
+
+**مهم جداً أثناء التثبيت:** فعّل الخيار  
+`Add python.exe to PATH`
+
 ## التشغيل السريع على جهازك (Windows)
 
-1. ثبّت Python إن لم يكن مثبتاً.
+1. ثبّت Python عبر `install_python.bat` إن لم يكن مثبتاً.
 2. انسخ مجلد المشروع إلى جهازك، أو شغّل من نفس المجلد.
 3. انقر مرتين على:
 
