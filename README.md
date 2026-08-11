@@ -76,6 +76,16 @@ python update_mfile_from_excel.py --emp-excel-col "رقم الموظف" --servic
 python update_mfile_from_excel.py --mode update
 ```
 
+## تسريع الحاسوب خطوة بخطوة
+
+إذا كان الجهاز بطيئاً أثناء العمل على الفوكس/Excel:
+
+```bat
+speed_up_pc.bat
+```
+
+الدليل الكامل: [`SPEED_UP_PC.md`](SPEED_UP_PC.md)
+
 ## ملاحظة مهمة
 
 هذه البيئة السحابية لا تصل إلى قرص `H:` على جهازك.  
