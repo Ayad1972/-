@@ -76,6 +76,17 @@ python update_mfile_from_excel.py --emp-excel-col "رقم الموظف" --servic
 python update_mfile_from_excel.py --mode update
 ```
 
+## حصر الملفات/المجلدات المتطابقة 100%
+
+أولاً تقرير فقط، ثم الإبقاء على الأحدث:
+
+```bat
+find_dupes.bat
+find_dupes.bat APPLY
+```
+
+الدليل: [`FIND_DUPLICATES.md`](FIND_DUPLICATES.md)
+
 ## تسريع الحاسوب خطوة بخطوة
 
 إذا كان الجهاز بطيئاً أثناء العمل على الفوكس/Excel، ضع الملف التالي على سطح المكتب وشغّله كمسؤول:
