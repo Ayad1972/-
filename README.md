@@ -78,13 +78,16 @@ python update_mfile_from_excel.py --mode update
 
 ## تسريع الحاسوب خطوة بخطوة
 
-إذا كان الجهاز بطيئاً أثناء العمل على الفوكس/Excel:
+إذا كان الجهاز بطيئاً أثناء العمل على الفوكس/Excel، ضع الملف التالي على سطح المكتب وشغّله كمسؤول:
 
 ```bat
-speed_up_pc.bat
+go.bat
 ```
 
-الدليل الكامل: [`SPEED_UP_PC.md`](SPEED_UP_PC.md)
+من القائمة اختر `9` ثم أعد تشغيل الجهاز.
+
+الدليل: [`SPEED_UP_PC.md`](SPEED_UP_PC.md)  
+(بديل متقدم: `speed_up_pc.bat` مع `speed_up_pc.ps1`)
 
 ## ملاحظة مهمة
 
