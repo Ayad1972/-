@@ -16,7 +16,7 @@ echo No H: drive required
 echo ============================================
 echo.
 
-%PY% -m pip install --quiet openpyxl dbfread dbf
+%PY% -m pip install --quiet openpyxl dbfread dbf >nul 2>&1
 echo.
 echo 1) Inspect files...
 %PY% "%~dp0update_mfile_from_excel.py" --inspect-only

@@ -15,7 +15,7 @@ echo Files are searched in this folder, data\, Desktop, USB
 echo ============================================
 echo.
 
-%PY% -m pip install --quiet openpyxl "xlrd==1.2.0"
+%PY% -m pip install --quiet openpyxl "xlrd==1.2.0" >nul 2>&1
 %PY% "%~dp0merge_mm_into_ss.py" --mm "%~dp0ff.xlsx"
 if errorlevel 1 (
   %PY% "%~dp0merge_mm_into_ss.py"

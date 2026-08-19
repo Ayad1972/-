@@ -496,15 +496,11 @@ def default_paths() -> Tuple[Path, Path]:
         candidates_excel = [
             root / "data" / "New Microsoft Excel Worksheet.xlsx",
             root / "New Microsoft Excel Worksheet.xlsx",
-            Path(r"H:\New Microsoft Excel Worksheet.xlsx"),
-            Path("/mnt/h/New Microsoft Excel Worksheet.xlsx"),
         ]
         candidates_dbf = [
             root / "MFILE.DBF",
             root / "data" / "MFILE.DBF",
             root / "MFILE_updated.DBF",
-            Path(r"H:\MFILE.DBF"),
-            Path("/mnt/h/MFILE.DBF"),
         ]
         excel = next((p for p in candidates_excel if p.exists()), candidates_excel[0])
         dbfp = next((p for p in candidates_dbf if p.exists()), candidates_dbf[0])
@@ -561,12 +557,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("\nالملف غير موجود على هذه الحاسبة.")
         print(exc)
         print("انسخ الملفات إلى مجلد المشروع أو مجلد data ثم شغّل START.bat")
-        print("لا حاجة لقرص H: بعد الآن.")
         return 1
     except Exception as exc:
         print("\nتعذر النقل:", exc)
-        print("شغّل للفحص:")
-        print(f'  python update_mfile_from_excel.py --inspect-only --excel "{excel_path}" --dbf "{dbf_path}"')
+        print("ضع Excel و MFILE.DBF في مجلد البرنامج أو في data ثم أعد التشغيل.")
         return 1
     return 0
 

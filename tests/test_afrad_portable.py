@@ -11,11 +11,13 @@ if str(ROOT) not in sys.path:
 import afrad_portable as ap
 import start_afrad
 import update_mfile_from_excel as upd
+
 BAT_FILES = [
     "START.bat",
     "OPEN.bat",
     "GO.bat",
     "_find_python.bat",
+    "_prepare.bat",
     "install_python.bat",
     "run_update_mfile.bat",
     "run_merge_mm_into_ss.bat",
@@ -23,6 +25,7 @@ BAT_FILES = [
     "copy_to_desktop.bat",
     "download_mfile_to_pc.bat",
     "speed_up_pc.bat",
+    "TOOLS.bat",
 ]
 
 
@@ -33,6 +36,37 @@ class AsciiBatTests(unittest.TestCase):
             data = path.read_bytes()
             self.assertFalse(data.startswith(b"\xef\xbb\xbf"), name)
             data.decode("ascii")
+
+    def test_start_does_not_need_python_to_open(self):
+        text = (ROOT / "START.bat").read_text(encoding="ascii")
+        launch_at = text.find("start \"\" /D")
+        py_at = text.find("%PY%")
+        self.assertNotEqual(launch_at, -1)
+        self.assertGreater(py_at, launch_at)
+        self.assertIn("exit /b 0", text)
+        self.assertNotIn("chcp", text.lower())
+        self.assertNotIn("ascii_uppercase", text)
+
+    def test_prepare_maps_h_without_probing_h_exist(self):
+        text = (ROOT / "_prepare.bat").read_text(encoding="ascii")
+        self.assertIn("subst H:", text)
+        self.assertIn("config.fpw", text)
+        self.assertIn("RESOURCE=OFF", text)
+        self.assertNotIn("if exist H:", text)
+        self.assertNotIn("chcp", text.lower())
+        self.assertIn("C:\\Afrad2_work", text)
+
+    def test_start_always_exits_zero(self):
+        text = (ROOT / "START.bat").read_text(encoding="ascii")
+        self.assertNotIn("exit /b 1", text)
+        self.assertNotIn("exit /b %", text)
+
+    def test_portable_py_does_not_scan_all_letters(self):
+        src = (ROOT / "afrad_portable.py").read_text(encoding="utf-8")
+        self.assertNotIn("ascii_uppercase", src)
+        self.assertIn("SetErrorMode", src)
+        self.assertNotIn('["chcp"', src)
+        self.assertNotIn("'chcp'", src)
 
 
 class PathFinderTests(unittest.TestCase):
@@ -76,6 +110,13 @@ class PathFinderTests(unittest.TestCase):
         path = ap.ensure_local_mfile()
         self.assertEqual(path, self.tmp / "MFILE.DBF")
 
+    def test_ensure_local_mfile_from_updated_copy(self):
+        (self.tmp / "MFILE.DBF").unlink()
+        (self.tmp / "MFILE_updated.DBF").write_bytes((ROOT / "MFILE_updated.DBF").read_bytes())
+        path = ap.ensure_local_mfile()
+        self.assertEqual(path, self.tmp / "MFILE.DBF")
+        self.assertTrue((self.tmp / "MFILE.DBF").exists())
+
     def test_default_update_paths_not_h_drive(self):
         excel, dbfp = ap.default_update_paths()
         self.assertNotEqual(str(excel)[:2].upper(), "H:")
@@ -93,6 +134,9 @@ class PathFinderTests(unittest.TestCase):
         text = cfg.read_text(encoding="ascii")
         self.assertIn("RESOURCE=OFF", text)
         self.assertIn("DEFAULT=.", text)
+        self.assertIn("HELP=OFF", text)
+        self.assertNotIn("COMMAND=", text)
+        self.assertTrue((self.tmp / "TEMP").is_dir())
 
     def test_does_not_pick_unrelated_exe(self):
         (self.tmp / "setup.exe").write_bytes(b"MZ")
@@ -101,6 +145,19 @@ class PathFinderTests(unittest.TestCase):
         found = ap.find_personnel_exe()
         self.assertIsNotNone(found)
         self.assertEqual(found.name, "Afrad2.exe")
+
+    def test_launch_fake_exe_returns_zero(self):
+        fake = self.tmp / "Afrad.exe"
+        fake.write_bytes(b"MZ")
+        self.assertEqual(ap.launch_personnel(fake), 0)
+
+    def test_launch_missing_exe_returns_zero(self):
+        self.assertEqual(ap.launch_personnel(self.tmp / "nope.exe"), 0)
+
+    def test_prepare_environment_never_raises(self):
+        status = ap.prepare_environment()
+        self.assertEqual(status["mfile"], str(self.tmp / "MFILE.DBF"))
+        self.assertTrue((self.tmp / "config.fpw").exists())
 
 
 class ScriptBehaviorTests(unittest.TestCase):
@@ -129,10 +186,24 @@ class ScriptBehaviorTests(unittest.TestCase):
         code = start_afrad.main(["--check"])
         self.assertEqual(code, 0)
 
+    def test_start_open_without_tty_returns_zero(self):
+        old = sys.stdin.isatty
+        sys.stdin.isatty = lambda: False
+        try:
+            self.assertEqual(start_afrad.main(["--open"]), 0)
+        finally:
+            sys.stdin.isatty = old
+
     def test_default_paths_find_repo_mfile(self):
         excel, dbfp = upd.default_paths()
         self.assertTrue(dbfp.exists(), dbfp)
         self.assertNotEqual(str(dbfp).replace("\\", "/"), "H:/MFILE.DBF")
+        self.assertFalse(str(excel).upper().startswith("H:"))
+
+    def test_ps1_defaults_are_local(self):
+        text = (ROOT / "merge_mm_into_ss.ps1").read_text(encoding="utf-8")
+        self.assertNotIn("H:\\ss.xls", text)
+        self.assertIn("PSScriptRoot", text)
 
 
 if __name__ == "__main__":

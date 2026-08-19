@@ -1,12 +1,12 @@
 # مقارنة mm.xlsx مع ss.xls وإضافة الأرقام من mm إلى ss حسب الاسم المشترك
 # الاستخدام:
 #   powershell -ExecutionPolicy Bypass -File merge_mm_into_ss.ps1
-#   powershell -ExecutionPolicy Bypass -File merge_mm_into_ss.ps1 -SsPath "H:\ss.xls" -MmPath "H:\mm.xlsx"
+#   powershell -ExecutionPolicy Bypass -File merge_mm_into_ss.ps1 -SsPath "ss.xls" -MmPath "mm.xlsx"
 
 param(
-    [string]$SsPath = "H:\ss.xls",
-    [string]$MmPath = "H:\mm.xlsx",
-    [string]$OutPath = "H:\ss_updated.xls"
+    [string]$SsPath = $(Join-Path $PSScriptRoot "ss.xls"),
+    [string]$MmPath = $(Join-Path $PSScriptRoot "mm.xlsx"),
+    [string]$OutPath = $(Join-Path $PSScriptRoot "ss_updated.xls")
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,8 +90,16 @@ Write-Host "============================================"
 Write-Host "دمج أرقام mm في ss حسب الاسم المشترك"
 Write-Host "============================================"
 
-if (-not (Test-Path -LiteralPath $SsPath)) { throw "الملف غير موجود: $SsPath" }
-if (-not (Test-Path -LiteralPath $MmPath)) { throw "الملف غير موجود: $MmPath" }
+if (-not (Test-Path -LiteralPath $SsPath)) {
+    Write-Host "File not found: $SsPath"
+    Write-Host "Put ss.xls in this folder or in data"
+    exit 0
+}
+if (-not (Test-Path -LiteralPath $MmPath)) {
+    Write-Host "File not found: $MmPath"
+    Write-Host "Put mm.xlsx in this folder or in data"
+    exit 0
+}
 
 $excel = New-Object -ComObject Excel.Application
 $excel.Visible = $false

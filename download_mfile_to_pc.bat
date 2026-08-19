@@ -23,10 +23,7 @@ if errorlevel 1 (
   )
 )
 
-if exist H:\ (
-  copy /Y "%LOCAL%" "H:\MFILE_updated.DBF" >nul
-  echo Also copied to H:\ if the flash drive is present.
-)
+copy /Y "%LOCAL%" "H:\MFILE_updated.DBF" >nul 2>&1
 
 echo.
 echo Open the file from this folder or Desktop.

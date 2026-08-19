@@ -182,10 +182,11 @@ def main(argv: list[str] | None = None) -> int:
             if exe:
                 return launch_personnel(exe)
             print()
-            print("لم يُفتح برنامج EXE لأن ملف النظام غير موجود في هذا المجلد.")
-            print("يمكنك استخدام الأدوات من القائمة، أو نسخ برنامج الأفراد إلى هنا.")
+            print("انسخ برنامج الأفراد (EXE + VFP*.DLL) إلى هذا المجلد ثم شغّل START.bat")
             print()
-            return show_menu()
+            if sys.stdin.isatty():
+                return show_menu()
+            return 0
         print("استخدام: python start_afrad.py [--open|--menu|--check]")
         return 0
     except KeyboardInterrupt:
