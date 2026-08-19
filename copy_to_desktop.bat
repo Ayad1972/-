@@ -1,27 +1,27 @@
 @echo off
-chcp 65001 >nul
-setlocal
+cd /d "%~dp0"
+title Copy MAIN720 to Desktop
 
 set "SRC=%~dp0MAIN720_updated.xls"
+if not exist "%SRC%" set "SRC=%~dp0data\MAIN720_updated.xls"
 set "DEST=%USERPROFILE%\Desktop\MAIN720_updated.xls"
 
 if not exist "%SRC%" (
-  echo الملف غير موجود بجانب هذا الملف:
+  echo File not found:
   echo %SRC%
-  echo.
-  echo ضع MAIN720_updated.xls بجانب copy_to_desktop.bat ثم اعد التشغيل.
+  echo Put MAIN720_updated.xls in this folder or in data\
   pause
-  exit /b 1
+  exit /b 0
 )
 
 copy /Y "%SRC%" "%DEST%" >nul
 if errorlevel 1 (
-  echo فشل النسخ إلى سطح المكتب.
+  echo Copy to Desktop failed.
   pause
-  exit /b 1
+  exit /b 0
 )
 
-echo تم الحفظ على سطح المكتب:
+echo Saved to Desktop:
 echo %DEST%
 explorer "%USERPROFILE%\Desktop"
 pause
