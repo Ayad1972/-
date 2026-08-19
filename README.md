@@ -76,6 +76,18 @@ python update_mfile_from_excel.py --emp-excel-col "رقم الموظف" --servic
 python update_mfile_from_excel.py --mode update
 ```
 
+## نقل المحادثات إلى OneDrive
+
+لنسخ محادثات Cursor وواتساب وتليغرام وملفات التصدير إلى ون درايف دون حذف الأصل:
+
+```bat
+copy_chats_to_onedrive.bat
+```
+
+اضغط Enter للنسخ. الملفات تُحفظ في `OneDrive\المحادثات\التاريخ_والوقت\`.
+
+الدليل الكامل: [`COPY_CHATS_ONEDRIVE.md`](COPY_CHATS_ONEDRIVE.md)
+
 ## تسريع الحاسوب خطوة بخطوة
 
 إذا كان الجهاز بطيئاً أثناء العمل على الفوكس/Excel:
