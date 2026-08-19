@@ -1,49 +1,51 @@
 @echo off
-chcp 1256 >nul
-setlocal
+REM ASCII-only. Finds Excel/DBF on this PC (folder, data, Desktop, USB, H:).
 cd /d "%~dp0"
+title Update MFILE from Excel
 
-echo ============================================
-echo نقل الموظفين والخدمة من Excel الى MFILE.DBF
-echo مع الحفاظ على ترميز الفوكس القديم
-echo ============================================
-
-python -m pip install --quiet openpyxl dbfread dbf
-if errorlevel 1 (
-  echo فشل تثبيت المكتبات. تأكد من تثبيت Python.
+call "%~dp0_find_python.bat"
+if not defined PY (
+  echo Python not found. Run START.bat first.
   pause
-  exit /b 1
+  exit /b 0
 )
 
+echo ============================================
+echo Update MFILE.DBF from Excel
+echo No H: drive required
+echo ============================================
 echo.
-echo 1^) فحص الملفات...
-python "%~dp0update_mfile_from_excel.py" --inspect-only --excel "H:\New Microsoft Excel Worksheet.xlsx" --dbf "H:\MFILE.DBF"
+
+%PY% -m pip install --quiet openpyxl dbfread dbf
+echo.
+echo 1) Inspect files...
+%PY% "%~dp0update_mfile_from_excel.py" --inspect-only
 if errorlevel 1 (
   echo.
-  echo لم يتم العثور على الملفات على H:\
-  echo انسخ الملفين الى مجلد data بجانب هذا الملف ثم اعد التشغيل.
-  pause
-  exit /b 1
-)
-
-echo.
-echo 2^) تجربة بدون تعديل...
-python "%~dp0update_mfile_from_excel.py" --dry-run --excel "H:\New Microsoft Excel Worksheet.xlsx" --dbf "H:\MFILE.DBF"
-if errorlevel 1 (
-  pause
-  exit /b 1
-)
-
-echo.
-set /p CONFIRM=هل تريد التنفيذ الفعلي الان؟ (Y/N): 
-if /I not "%CONFIRM%"=="Y" (
-  echo تم الإلغاء.
+  echo Put MFILE.DBF and the Excel file in this folder or in data\
+  echo Then run this file again.
   pause
   exit /b 0
 )
 
 echo.
-echo 3^) التنفيذ الفعلي مع نسخة احتياطية...
-python "%~dp0update_mfile_from_excel.py" --excel "H:\New Microsoft Excel Worksheet.xlsx" --dbf "H:\MFILE.DBF"
+echo 2) Dry run...
+%PY% "%~dp0update_mfile_from_excel.py" --dry-run
+if errorlevel 1 (
+  pause
+  exit /b 0
+)
+
+echo.
+set /p CONFIRM=Apply changes now? (Y/N): 
+if /I not "%CONFIRM%"=="Y" (
+  echo Cancelled.
+  pause
+  exit /b 0
+)
+
+echo.
+echo 3) Writing with backup...
+%PY% "%~dp0update_mfile_from_excel.py"
 echo.
 pause

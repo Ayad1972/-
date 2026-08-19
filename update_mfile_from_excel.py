@@ -5,7 +5,7 @@
 
 الاستخدام:
   python update_mfile_from_excel.py
-  python update_mfile_from_excel.py --excel "H:\\New Microsoft Excel Worksheet.xlsx" --dbf "H:\\MFILE.DBF"
+  python update_mfile_from_excel.py --excel "data\\employees.xlsx" --dbf "MFILE.DBF"
   python update_mfile_from_excel.py --inspect-only
 """
 
@@ -67,6 +67,7 @@ EMP_ALIASES = [
     "الموظف",
     "EMPNO",
     "EMP_NO",
+    "PNO",
     "EMPLOYEE",
     "EMP",
     "NO",
@@ -243,7 +244,7 @@ def load_excel_rows(
     return out, meta
 
 
-def inspect_files(excel_path: Path, dbf_path: Path) -> None:
+def inspect_files(excel_path: Path, dbf_path: Path) -> int:
     print("=" * 60)
     print("فحص الملفات")
     print("=" * 60)
@@ -269,16 +270,21 @@ def inspect_files(excel_path: Path, dbf_path: Path) -> None:
         print(f"  Language Driver ID: {ldid} (0x{ldid:02X})")
         print(f"  الترميز المقترح: {enc}")
         table = DBF(str(dbf_path), encoding=enc, ignore_missing_memofile=True, load=True)
+        records = list(getattr(table, "records", table))
         print(f"  الحقول: {table.field_names}")
-        print(f"  عدد السجلات: {len(table)}")
-        if table:
-            print(f"  سجل نموذجي: {dict(table[0])}")
+        print(f"  عدد السجلات: {len(records)}")
+        if records:
+            print(f"  سجل نموذجي: {dict(records[0])}")
         emp_field = find_dbf_field(table.field_names, EMP_ALIASES)
         svc_field = find_dbf_field(table.field_names, SERVICE_ALIASES)
         print(f"  حقل رقم الموظف المكتشف: {emp_field}")
         print(f"  حقل الخدمة المكتشف: {svc_field}")
     else:
         print("  الملف غير موجود")
+        print("  ضع MFILE.DBF بجانب البرنامج أو في مجلد data")
+    if not excel_path.exists():
+        print("  ضع ملف Excel في مجلد المشروع أو data")
+    return 0 if dbf_path.exists() else 1
 
 
 def field_info(table: "dbf_lib.Table", field_name: str) -> Tuple[str, int, int]:
@@ -481,24 +487,28 @@ def preserve_language_driver(dbf_path: Path, ldid: int) -> None:
 
 
 def default_paths() -> Tuple[Path, Path]:
-    # مسارات المستخدم على Windows، مع بدائل محلية إن نُسخت الملفات للمشروع
-    candidates_excel = [
-        Path(r"H:\New Microsoft Excel Worksheet.xlsx"),
-        Path("/mnt/h/New Microsoft Excel Worksheet.xlsx"),
-        Path("H:/New Microsoft Excel Worksheet.xlsx"),
-        Path(__file__).resolve().parent / "data" / "New Microsoft Excel Worksheet.xlsx",
-        Path(__file__).resolve().parent / "New Microsoft Excel Worksheet.xlsx",
-    ]
-    candidates_dbf = [
-        Path(r"H:\MFILE.DBF"),
-        Path("/mnt/h/MFILE.DBF"),
-        Path("H:/MFILE.DBF"),
-        Path(__file__).resolve().parent / "data" / "MFILE.DBF",
-        Path(__file__).resolve().parent / "MFILE.DBF",
-    ]
-    excel = next((p for p in candidates_excel if p.exists()), candidates_excel[0])
-    dbfp = next((p for p in candidates_dbf if p.exists()), candidates_dbf[0])
-    return excel, dbfp
+    try:
+        from afrad_portable import default_update_paths
+
+        return default_update_paths()
+    except Exception:
+        root = Path(__file__).resolve().parent
+        candidates_excel = [
+            root / "data" / "New Microsoft Excel Worksheet.xlsx",
+            root / "New Microsoft Excel Worksheet.xlsx",
+            Path(r"H:\New Microsoft Excel Worksheet.xlsx"),
+            Path("/mnt/h/New Microsoft Excel Worksheet.xlsx"),
+        ]
+        candidates_dbf = [
+            root / "MFILE.DBF",
+            root / "data" / "MFILE.DBF",
+            root / "MFILE_updated.DBF",
+            Path(r"H:\MFILE.DBF"),
+            Path("/mnt/h/MFILE.DBF"),
+        ]
+        excel = next((p for p in candidates_excel if p.exists()), candidates_excel[0])
+        dbfp = next((p for p in candidates_dbf if p.exists()), candidates_dbf[0])
+        return excel, dbfp
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -533,8 +543,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dbf_path = Path(os.path.expandvars(str(dbf_path)))
 
     if args.inspect_only:
-        inspect_files(excel_path, dbf_path)
-        return 0
+        return inspect_files(excel_path, dbf_path)
 
     try:
         update_dbf(
@@ -548,9 +557,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             mode=args.mode,
             dry_run=args.dry_run,
         )
+    except FileNotFoundError as exc:
+        print("\nالملف غير موجود على هذه الحاسبة.")
+        print(exc)
+        print("انسخ الملفات إلى مجلد المشروع أو مجلد data ثم شغّل START.bat")
+        print("لا حاجة لقرص H: بعد الآن.")
+        return 1
     except Exception as exc:
-        print("\nخطأ:", exc)
-        print("\nنصيحة: شغّل أولاً للفحص:")
+        print("\nتعذر النقل:", exc)
+        print("شغّل للفحص:")
         print(f'  python update_mfile_from_excel.py --inspect-only --excel "{excel_path}" --dbf "{dbf_path}"')
         return 1
     return 0

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 دمج أرقام mm.xlsx في ss.xls حسب الاسم المشترك.
-يحفظ الناتج في H:\\ss_updated.xls (أو .xlsx إن تعذر xls).
+الملفات تُبحث تلقائياً في مجلد البرنامج و data وسطح المكتب والفلش.
 """
 
 from __future__ import annotations
@@ -98,11 +98,25 @@ def cell_to_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _default_merge_paths() -> Tuple[str, str, str]:
+    root = Path(__file__).resolve().parent
+    try:
+        from afrad_portable import FF_NAMES, MM_NAMES, SS_NAMES, ROOT, find_named
+
+        ss = find_named(SS_NAMES, "ss") or (ROOT / "ss.xls")
+        mm = find_named(MM_NAMES, "mm") or find_named(FF_NAMES, "ff") or (ROOT / "mm.xlsx")
+        out = ss.with_name("ss_updated.xlsx") if ss.suffix else (ROOT / "ss_updated.xlsx")
+        return str(ss), str(mm), str(out)
+    except Exception:
+        return str(root / "ss.xls"), str(root / "mm.xlsx"), str(root / "ss_updated.xlsx")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    ss_default, mm_default, out_default = _default_merge_paths()
     p = argparse.ArgumentParser()
-    p.add_argument("--ss", default=r"H:\ss.xls")
-    p.add_argument("--mm", default=r"H:\mm.xlsx")
-    p.add_argument("--out", default=r"H:\ss_updated.xlsx")
+    p.add_argument("--ss", default=ss_default)
+    p.add_argument("--mm", default=mm_default)
+    p.add_argument("--out", default=out_default)
     args = p.parse_args(argv)
 
     ss_path = Path(args.ss)
@@ -111,9 +125,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if not ss_path.exists():
         print("الملف غير موجود:", ss_path)
+        print("ضع ss.xls في مجلد البرنامج أو في data ثم أعد التشغيل.")
         return 1
     if not mm_path.exists():
         print("الملف غير موجود:", mm_path)
+        print("ضع mm.xlsx أو ff.xlsx في مجلد البرنامج أو في data ثم أعد التشغيل.")
         return 1
 
     ss_headers, ss_rows = read_any(ss_path)
@@ -179,4 +195,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as exc:
+        print("تعذر الدمج:", exc)
+        print("ضع ss.xls و mm.xlsx في مجلد البرنامج أو data")
+        sys.exit(1)

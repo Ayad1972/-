@@ -1,0 +1,9 @@
+afrad_local.cfg
+MFILE.DBF
+config.fpw.bak_portable
+__pycache__/
+tests/__pycache__/
+TEMP/
+*.bak_portable
+*.bak_*
+.pytest_cache/

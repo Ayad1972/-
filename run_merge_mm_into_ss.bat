@@ -1,18 +1,21 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
+title Merge mm.xlsx into ss.xls
+
+call "%~dp0_find_python.bat"
+if not defined PY (
+  echo Python not found. Run START.bat first.
+  pause
+  exit /b 0
+)
 
 echo ============================================
-echo دمج ارقام mm.xlsx داخل ss.xls حسب الاسم
+echo Merge numbers from mm.xlsx into ss.xls
+echo Files are searched in this folder, data\, Desktop, USB
 echo ============================================
 echo.
-echo المدخلات:
-echo   H:\ss.xls
-echo   H:\mm.xlsx
-echo الناتج:
-echo   H:\ss_updated.xls
-echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0merge_mm_into_ss.ps1" -SsPath "H:\ss.xls" -MmPath "H:\mm.xlsx" -OutPath "H:\ss_updated.xls"
+%PY% -m pip install --quiet openpyxl "xlrd==1.2.0"
+%PY% "%~dp0merge_mm_into_ss.py"
 echo.
 pause
