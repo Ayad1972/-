@@ -1,23 +1,20 @@
 * transfer_alawat.prg
-* Run inside the SAME Visual FoxPro window that shows 222 records:
-*   DO transfer_alawat.prg
-* This ZAP the open table and loads 126 Excel rows. Python cannot do that
-* while FoxPro has the file locked.
+* DO C:\Users\ngc\Downloads\transfer_alawat.prg
+* Use the already-open AL082026 table and the xlsx sitting next to it.
 
-LOCAL lcDbf, lcXls, lnOld, lnNew, lnWanted
+LOCAL lcDbf, lcXls, lcDir, lnOld, lnNew, lnWanted
 LOCAL loExcel, loBook, loSheet, llExcelOk
 LOCAL lnHeader, lnCols, lnRow, lnLast, lnIns, lnBlank
 LOCAL lnFCount, i, lnCol, lcField, lcHdr, lcKey, lcVal, lcType
-LOCAL lnPnoCol, lnMapped, lnF, lnWidth, lnDec
-LOCAL lnNameCol, lnExcelNums, lnUsedNum, lnDateNums, lnUsedDate
-LOCAL luVal, ldDate, lcAmer
-LOCAL laFields[1], laCol[1], laExcelNum[1], laExcelDate[1]
+LOCAL lnPnoCol, lnNameCol, lnWidth, lnDec
+LOCAL lnExcelNums, lnUsedNum
+LOCAL ldDate, lcAmer
+LOCAL laFields[1], laCol[1], laExcelNum[1], laDir[1], lnDir
 
 lnWanted = 126
 lcAmer = "8276"
 ldDate = DATE(2026, 8, 13)
 llExcelOk = .F.
-lnNew = -1
 
 SET TALK OFF
 SET SAFETY OFF
@@ -26,61 +23,43 @@ SET DELETED ON
 SET CONFIRM OFF
 
 lcDbf = ""
-lcXls = ""
 IF USED("AL082026")
     lcDbf = DBF("AL082026")
 ENDIF
-IF EMPTY(lcDbf) AND !EMPTY(ALIAS()) AND ATC("AL082026", DBF()) > 0
-    lcDbf = DBF()
+IF EMPTY(lcDbf) AND !EMPTY(ALIAS())
+    IF ATC("AL082026", ALIAS()) > 0 OR ATC("AL082026", DBF()) > 0
+        lcDbf = DBF()
+    ENDIF
 ENDIF
 IF EMPTY(lcDbf)
-    lcDbf = FindAlDbf()
-ENDIF
-IF !EMPTY(lcDbf)
-    lcXls = FindXlsxInFolder(LEFT(lcDbf, RAT("\", lcDbf)))
-ENDIF
-IF EMPTY(lcXls)
-    lcXls = FindAlXls()
+    lcDbf = GETFILE("DBF", "AL082026")
 ENDIF
 IF EMPTY(lcDbf)
-    lcDbf = GETFILE("DBF")
-ENDIF
-IF EMPTY(lcXls)
-    lcXls = GETFILE("XLSX")
-ENDIF
-IF EMPTY(lcDbf) OR !FILE(lcDbf)
     MESSAGEBOX("AL082026.DBF not found")
     RETURN
 ENDIF
-IF EMPTY(lcXls) OR !FILE(lcXls)
-    MESSAGEBOX("Excel file not found")
+
+lcDir = LEFT(lcDbf, RAT("\", lcDbf))
+lcXls = ""
+lnDir = ADIR(laDir, lcDir + "*.xlsx")
+IF TYPE("lnDir") = "N" AND lnDir > 0
+    FOR i = 1 TO lnDir
+        IF ATC("8276", laDir[i, 1]) > 0
+            lcXls = lcDir + laDir[i, 1]
+            EXIT
+        ENDIF
+    ENDFOR
+    IF EMPTY(lcXls)
+        lcXls = lcDir + laDir[1, 1]
+    ENDIF
+ENDIF
+IF EMPTY(lcXls)
+    lcXls = GETFILE("XLSX", "Excel")
+ENDIF
+IF EMPTY(lcXls)
+    MESSAGEBOX("Excel file not found in" + CHR(13) + lcDir)
     RETURN
 ENDIF
-
-* Close alias then reopen exclusive so ZAP is allowed.
-IF USED("AL082026")
-    SELECT AL082026
-    USE
-ENDIF
-USE (lcDbf) ALIAS AL082026 EXCLUSIVE
-IF !ISEXCLUSIVE("AL082026")
-    MESSAGEBOX("Cannot open AL082026 exclusive. Close BROWSE then DO again.")
-    RETURN
-ENDIF
-
-lnOld = RECCOUNT()
-COPY TO (ADDBS(JUSTPATH(lcDbf)) + "AL082026_BAK_BEFORE_ZAP")
-ZAP
-IF RECCOUNT() <> 0
-    MESSAGEBOX("ZAP failed. Count is still " + TRANSFORM(RECCOUNT()))
-    RETURN
-ENDIF
-
-lnFCount = AFIELDS(laFields)
-DIMENSION laCol[lnFCount]
-FOR i = 1 TO lnFCount
-    laCol[i] = 0
-ENDFOR
 
 TRY
     loExcel = CREATEOBJECT("Excel.Application")
@@ -92,87 +71,73 @@ TRY
 CATCH
     llExcelOk = .F.
 ENDTRY
-
 IF !llExcelOk
-    MESSAGEBOX("Excel COM failed. Is Excel installed?")
+    MESSAGEBOX("Cannot open Excel. Is Microsoft Excel installed?")
     RETURN
 ENDIF
 
-lnCols = loSheet.UsedRange.Columns.Count
-IF lnCols < 1
+IF USED("AL082026")
+    SELECT AL082026
+    USE
+ENDIF
+USE (lcDbf) ALIAS AL082026 EXCLUSIVE
+IF !ISEXCLUSIVE("AL082026")
+    TRY
+        loBook.Close(.F.)
+        loExcel.Quit()
+    CATCH
+    ENDTRY
+    MESSAGEBOX("Close BROWSE first, then DO the program again.")
+    RETURN
+ENDIF
+
+lnOld = RECCOUNT()
+COPY TO (lcDir + "AL082026_BAK_BEFORE_ZAP")
+ZAP
+
+lnFCount = AFIELDS(laFields)
+DIMENSION laCol[lnFCount]
+FOR i = 1 TO lnFCount
+    laCol[i] = 0
+ENDFOR
+
+lnCols = 20
+lnLast = 200
+TRY
+    lnCols = loSheet.UsedRange.Columns.Count
+    lnLast = loSheet.UsedRange.Rows.Count
+CATCH
+ENDTRY
+IF VARTYPE(lnCols) <> "N" OR lnCols < 1
     lnCols = 20
 ENDIF
-lnLast = loSheet.UsedRange.Rows.Count
-IF lnLast < 2
+IF VARTYPE(lnLast) <> "N" OR lnLast < 2
     lnLast = 200
 ENDIF
 
 lnHeader = 1
-FOR lnRow = 1 TO MIN(15, lnLast)
-    IF HeaderScore(loSheet, lnRow, lnCols, @laFields, lnFCount) ;
-            > HeaderScore(loSheet, lnHeader, lnCols, @laFields, lnFCount)
-        lnHeader = lnRow
-    ENDIF
-ENDFOR
+lnPnoCol = DetectPnoCol(loSheet, 2, MIN(30, lnLast), lnCols)
+IF lnPnoCol = 0
+    lnPnoCol = 1
+ENDIF
+lnNameCol = DetectNameCol(loSheet, 2, MIN(30, lnLast), lnCols, lnPnoCol)
 
-lnMapped = 0
-lnPnoCol = 0
 FOR i = 1 TO lnFCount
     lcField = UPPER(ALLTRIM(laFields[i, 1]))
-    FOR lnCol = 1 TO lnCols
-        lcHdr = NormHdr(CellText(loSheet, lnHeader, lnCol))
-        IF EMPTY(lcHdr)
-            LOOP
-        ENDIF
-        IF lcHdr == lcField OR MatchAlias(lcField, lcHdr)
-            laCol[i] = lnCol
-            lnMapped = lnMapped + 1
-            IF lcField == "PNO"
-                lnPnoCol = lnCol
-            ENDIF
-            EXIT
-        ENDIF
-    ENDFOR
-ENDFOR
-
-IF lnPnoCol = 0
-    lnPnoCol = DetectPnoCol(loSheet, lnHeader + 1, lnLast, lnCols)
-    FOR i = 1 TO lnFCount
-        IF UPPER(ALLTRIM(laFields[i, 1])) == "PNO"
-            laCol[i] = lnPnoCol
-        ENDIF
-    ENDFOR
-ENDIF
-
-* Excel headers are often Arabic, so detect Name/Money/Date from the data.
-lnNameCol = 0
-FOR i = 1 TO lnFCount
-    IF UPPER(ALLTRIM(laFields[i, 1])) == "NAME" AND laCol[i] > 0
-        lnNameCol = laCol[i]
+    IF lcField == "PNO"
+        laCol[i] = lnPnoCol
+    ENDIF
+    IF lcField == "NAME"
+        laCol[i] = lnNameCol
     ENDIF
 ENDFOR
-IF lnNameCol = 0
-    lnNameCol = DetectNameCol(loSheet, lnHeader + 1, lnLast, lnCols, lnPnoCol)
-    FOR i = 1 TO lnFCount
-        IF UPPER(ALLTRIM(laFields[i, 1])) == "NAME"
-            laCol[i] = lnNameCol
-        ENDIF
-    ENDFOR
-ENDIF
 
 lnExcelNums = 0
-lnDateNums = 0
 FOR lnCol = 1 TO lnCols
     IF lnCol = lnPnoCol OR lnCol = lnNameCol
         LOOP
     ENDIF
-    IF LooksLikeDateCol(loSheet, lnHeader + 1, lnLast, lnCol)
-        lnDateNums = lnDateNums + 1
-        DIMENSION laExcelDate[lnDateNums]
-        laExcelDate[lnDateNums] = lnCol
-        LOOP
-    ENDIF
-    IF LooksLikeAmountCol(loSheet, lnHeader + 1, lnLast, lnCol)
+    IF LooksLikeAmountCol(loSheet, 2, MIN(30, lnLast), lnCol)
         lnExcelNums = lnExcelNums + 1
         DIMENSION laExcelNum[lnExcelNums]
         laExcelNum[lnExcelNums] = lnCol
@@ -180,40 +145,32 @@ FOR lnCol = 1 TO lnCols
 ENDFOR
 
 lnUsedNum = 0
-lnUsedDate = 0
 FOR i = 1 TO lnFCount
     IF laCol[i] > 0
         LOOP
     ENDIF
     lcField = UPPER(ALLTRIM(laFields[i, 1]))
-    lcType = UPPER(laFields[i, 2])
-    IF INLIST(lcField, "MONEYCOM", "MONEYPOST", "FRK", "BAS", "AMT", "ALLW") ;
-            OR (lcType $ "NFY" AND laFields[i, 3] >= 7 AND !INLIST(lcField, "PNO", "MO", "NO"))
+    IF INLIST(lcField, "MONEYCOM", "MONEYPOST", "FRK", "BAS", "AMT", "ALLW")
         lnUsedNum = lnUsedNum + 1
         IF lnUsedNum <= lnExcelNums
             laCol[i] = laExcelNum[lnUsedNum]
         ENDIF
     ENDIF
-    IF INLIST(lcField, "TESTDN", "DAT_NU", "DT", "DATE", "FDATE") OR lcType = "D"
-        IF laCol[i] = 0
-            lnUsedDate = lnUsedDate + 1
-            IF lnUsedDate <= lnDateNums
-                laCol[i] = laExcelDate[lnUsedDate]
-            ENDIF
-        ENDIF
-    ENDIF
 ENDFOR
+
+* If header row looks like titles, skip it.
+lcKey = CellText(loSheet, 1, lnPnoCol)
+IF LEN(CHRTRAN(ALLTRIM(lcKey), "0123456789", "")) > 0
+    lnHeader = 1
+ELSE
+    lnHeader = 0
+ENDIF
 
 lnIns = 0
 lnBlank = 0
 FOR lnRow = lnHeader + 1 TO lnLast
-    lcKey = ""
-    IF lnPnoCol > 0
-        lcKey = ALLTRIM(CellText(loSheet, lnRow, lnPnoCol))
-    ELSE
-        lcKey = ALLTRIM(CellText(loSheet, lnRow, 1))
-    ENDIF
-    IF EMPTY(lcKey)
+    lcKey = ALLTRIM(CellText(loSheet, lnRow, lnPnoCol))
+    IF EMPTY(lcKey) OR LEN(CHRTRAN(lcKey, "0123456789", "")) > 0
         lnBlank = lnBlank + 1
         IF lnIns > 0 AND lnBlank >= 2
             EXIT
@@ -234,16 +191,14 @@ FOR lnRow = lnHeader + 1 TO lnLast
         lcVal = ""
         IF laCol[i] > 0
             lcVal = CellText(loSheet, lnRow, laCol[i])
-        ELSE
-            lcVal = ""
         ENDIF
         IF EMPTY(lcVal)
             DO CASE
-            CASE INLIST(UPPER(lcField), "AMER", "AMR", "ORDER", "ORDNO", "NOAMR", "NO")
+            CASE UPPER(lcField) = "NO"
                 lcVal = lcAmer
             CASE UPPER(lcField) = "MO"
                 lcVal = "8"
-            CASE INLIST(UPPER(lcField), "TESTDN", "DAT_NU", "DT", "DATE", "FDATE") OR lcType = "D"
+            CASE lcType = "D"
                 PutField(lcField, lcType, lnWidth, lnDec, ldDate)
                 LOOP
             ENDCASE
@@ -262,10 +217,6 @@ loSheet = .NULL.
 loBook = .NULL.
 loExcel = .NULL.
 
-IF FILE(FORCEEXT(lcDbf, "CDX"))
-    REINDEX
-ENDIF
-
 lnNew = RECCOUNT()
 GO TOP
 SET FILTER TO
@@ -273,100 +224,46 @@ SET TALK ON
 COUNT
 SET TALK OFF
 
-MESSAGEBOX("Old count: " + TRANSFORM(lnOld) + CHR(13) + ;
-    "New count: " + TRANSFORM(lnNew) + CHR(13) + ;
-    "Excel rows loaded: " + TRANSFORM(lnIns) + CHR(13) + ;
-    "PNO col: " + TRANSFORM(lnPnoCol) + "  Name col: " + TRANSFORM(lnNameCol) + CHR(13) + ;
-    "Required: 126")
+MESSAGEBOX("Old: " + TRANSFORM(lnOld) + CHR(13) + ;
+    "New: " + TRANSFORM(lnNew) + CHR(13) + ;
+    "Inserted: " + TRANSFORM(lnIns) + CHR(13) + ;
+    "PNO col=" + TRANSFORM(lnPnoCol) + " Name col=" + TRANSFORM(lnNameCol) + CHR(13) + ;
+    "Excel: " + lcXls)
 
 RETURN
 
 
 FUNCTION CellText
 LPARAMETERS toSheet, tnRow, tnCol
-    LOCAL lu
-    lu = toSheet.Cells(tnRow, tnCol).Value
-    IF ISNULL(lu)
+    LOCAL lu, lc
+    lc = ""
+    IF VARTYPE(tnRow) <> "N" OR VARTYPE(tnCol) <> "N" OR tnRow < 1 OR tnCol < 1
         RETURN ""
     ENDIF
-    DO CASE
-    CASE VARTYPE(lu) = "N"
-        IF lu = INT(lu)
-            RETURN ALLTRIM(STR(lu, 18, 0))
-        ENDIF
-        RETURN ALLTRIM(STR(lu, 18, 4))
-    CASE VARTYPE(lu) = "D"
-        RETURN DTOC(lu)
-    CASE VARTYPE(lu) = "T"
-        RETURN TTOC(lu)
-    CASE VARTYPE(lu) = "L"
-        RETURN IIF(lu, "T", "F")
-    OTHERWISE
-        RETURN ALLTRIM(TRANSFORM(lu))
-    ENDCASE
-ENDFUNC
-
-
-FUNCTION NormHdr
-LPARAMETERS tc
-    LOCAL lc
-    lc = UPPER(ALLTRIM(tc))
-    lc = STRTRAN(lc, " ", "")
-    lc = STRTRAN(lc, "_", "")
-    lc = STRTRAN(lc, "-", "")
-    lc = STRTRAN(lc, ".", "")
-    RETURN lc
-ENDFUNC
-
-
-FUNCTION MatchAlias
-LPARAMETERS tcField, tcHdr
-    tcField = UPPER(ALLTRIM(tcField))
-    tcHdr = UPPER(ALLTRIM(tcHdr))
-    DO CASE
-    CASE tcField = "PNO"
-        RETURN INLIST(tcHdr, "PNO", "EMPNO", "EMPNO", "NO", "NUM", "NUMBER", "ID", "CODE")
-    CASE tcField = "NAME"
-        RETURN INLIST(tcHdr, "NAME", "ENAME", "ANAME", "EMPNAME", "FULLNAME")
-    CASE INLIST(tcField, "AMT", "ALLW", "MONEYCOM", "MONEYPOST")
-        RETURN INLIST(tcHdr, "AMT", "AMOUNT", "ALLW", "ALLOW", "ALAWA", "SAL", "VALUE", "VAL", "MONEY", "MONEYCOM", "MONEYPOST")
-    CASE tcField = "MO"
-        RETURN INLIST(tcHdr, "MO", "MONTH", "MM")
-    CASE INLIST(tcField, "FRK", "BAS")
-        RETURN INLIST(tcHdr, "FRK", "BAS", "BASIC", "DIFF")
-    CASE INLIST(tcField, "TESTDN", "DAT_NU", "DT", "DATE", "FDATE")
-        RETURN INLIST(tcHdr, "DT", "DATE", "FDATE", "HDATE", "TESTDN", "DAT_NU", "DATNU")
-    CASE INLIST(tcField, "TYPE", "TYP")
-        RETURN INLIST(tcHdr, "TYPE", "TYP", "KIND", "CLASS")
-    CASE INLIST(tcField, "AMER", "AMR", "ORDER", "ORDNO", "NOAMR")
-        RETURN INLIST(tcHdr, "AMER", "AMR", "ORDER", "ORDNO", "NOAMR", "BOOK")
-    CASE INLIST(tcField, "DT", "DATE", "FDATE")
-        RETURN INLIST(tcHdr, "DT", "DATE", "FDATE", "HDATE")
-    CASE INLIST(tcField, "NOTE", "NOTES")
-        RETURN INLIST(tcHdr, "NOTE", "NOTES", "REMARK", "REM")
-    ENDCASE
-    RETURN .F.
-ENDFUNC
-
-
-FUNCTION HeaderScore
-LPARAMETERS toSheet, tnRow, tnCols, taFields, tnFCount
-    EXTERNAL ARRAY taFields
-    LOCAL lnScore, lnCol, lcHdr, i
-    lnScore = 0
-    FOR lnCol = 1 TO tnCols
-        lcHdr = NormHdr(CellText(toSheet, tnRow, lnCol))
-        IF EMPTY(lcHdr)
-            LOOP
-        ENDIF
-        lnScore = lnScore + 1
-        FOR i = 1 TO tnFCount
-            IF lcHdr == UPPER(ALLTRIM(taFields[i, 1])) OR MatchAlias(taFields[i, 1], lcHdr)
-                lnScore = lnScore + 4
+    TRY
+        lu = toSheet.Cells(tnRow, tnCol).Value
+        DO CASE
+        CASE ISNULL(lu)
+            lc = ""
+        CASE VARTYPE(lu) = "N"
+            IF lu = INT(lu)
+                lc = ALLTRIM(STR(lu, 18, 0))
+            ELSE
+                lc = ALLTRIM(STR(lu, 18, 4))
             ENDIF
-        ENDFOR
-    ENDFOR
-    RETURN lnScore
+        CASE VARTYPE(lu) = "D"
+            lc = DTOC(lu)
+        CASE VARTYPE(lu) = "T"
+            lc = TTOC(lu)
+        CASE VARTYPE(lu) = "C"
+            lc = ALLTRIM(lu)
+        OTHERWISE
+            lc = ALLTRIM(TRANSFORM(lu))
+        ENDCASE
+    CATCH
+        lc = ""
+    ENDTRY
+    RETURN lc
 ENDFUNC
 
 
@@ -375,9 +272,15 @@ LPARAMETERS toSheet, tnFrom, tnTo, tnCols
     LOCAL lnCol, lnRow, lnBest, lnBestCol, lnHits, lc
     lnBest = 0
     lnBestCol = 1
+    IF tnFrom < 1
+        tnFrom = 1
+    ENDIF
+    IF tnTo < tnFrom
+        tnTo = tnFrom
+    ENDIF
     FOR lnCol = 1 TO tnCols
         lnHits = 0
-        FOR lnRow = tnFrom TO MIN(tnFrom + 25, tnTo)
+        FOR lnRow = tnFrom TO tnTo
             lc = ALLTRIM(CellText(toSheet, lnRow, lnCol))
             IF LEN(lc) >= 4 AND LEN(lc) <= 8 AND LEN(CHRTRAN(lc, "0123456789", "")) = 0
                 lnHits = lnHits + 1
@@ -397,12 +300,18 @@ LPARAMETERS toSheet, tnFrom, tnTo, tnCols, tnPnoCol
     LOCAL lnCol, lnRow, lnBest, lnBestCol, lnHits, lc
     lnBest = 0
     lnBestCol = 0
+    IF tnFrom < 1
+        tnFrom = 1
+    ENDIF
+    IF tnTo < tnFrom
+        tnTo = tnFrom
+    ENDIF
     FOR lnCol = 1 TO tnCols
         IF lnCol = tnPnoCol
             LOOP
         ENDIF
         lnHits = 0
-        FOR lnRow = tnFrom TO MIN(tnFrom + 25, tnTo)
+        FOR lnRow = tnFrom TO tnTo
             lc = ALLTRIM(CellText(toSheet, lnRow, lnCol))
             IF LEN(lc) >= 4 AND LEN(CHRTRAN(lc, "0123456789 .,-/", "")) > 2
                 lnHits = lnHits + 1
@@ -413,7 +322,7 @@ LPARAMETERS toSheet, tnFrom, tnTo, tnCols, tnPnoCol
             lnBestCol = lnCol
         ENDIF
     ENDFOR
-    IF lnBestCol = 0 AND tnPnoCol > 0 AND tnPnoCol < tnCols
+    IF lnBestCol = 0 AND tnPnoCol < tnCols
         lnBestCol = tnPnoCol + 1
     ENDIF
     RETURN lnBestCol
@@ -422,14 +331,15 @@ ENDFUNC
 
 FUNCTION LooksLikeAmountCol
 LPARAMETERS toSheet, tnFrom, tnTo, tnCol
-    LOCAL lnRow, lnHits, lc, lu
+    LOCAL lnRow, lnHits, lc
     lnHits = 0
-    FOR lnRow = tnFrom TO MIN(tnFrom + 25, tnTo)
-        lu = toSheet.Cells(lnRow, tnCol).Value
-        IF VARTYPE(lu) = "N"
-            lnHits = lnHits + 1
-            LOOP
-        ENDIF
+    IF tnFrom < 1
+        tnFrom = 1
+    ENDIF
+    IF tnTo < tnFrom
+        RETURN .F.
+    ENDIF
+    FOR lnRow = tnFrom TO tnTo
         lc = ALLTRIM(CellText(toSheet, lnRow, tnCol))
         IF !EMPTY(lc) AND VAL(CHRTRAN(lc, ",", "")) <> 0
             lnHits = lnHits + 1
@@ -439,29 +349,18 @@ LPARAMETERS toSheet, tnFrom, tnTo, tnCol
 ENDFUNC
 
 
-FUNCTION LooksLikeDateCol
-LPARAMETERS toSheet, tnFrom, tnTo, tnCol
-    LOCAL lnRow, lnHits, lu
-    lnHits = 0
-    FOR lnRow = tnFrom TO MIN(tnFrom + 20, tnTo)
-        lu = toSheet.Cells(lnRow, tnCol).Value
-        IF VARTYPE(lu) = "D" OR VARTYPE(lu) = "T"
-            lnHits = lnHits + 1
-        ENDIF
-    ENDFOR
-    RETURN lnHits >= 3
-ENDFUNC
-
-
 PROCEDURE PutField
 LPARAMETERS tcField, tcType, tnWidth, tnDec, tuVal
-    LOCAL lc, ln, ld
+    LOCAL lc, ln, ld, lnY, lnM, lnD
     tcType = UPPER(tcType)
     DO CASE
     CASE tcType = "C"
         lc = ALLTRIM(TRANSFORM(tuVal))
-        REPLACE (tcField) WITH LEFT(lc, tnWidth)
-    CASE tcType = "N" OR tcType = "F" OR tcType = "B" OR tcType = "Y"
+        IF tnWidth > 0
+            lc = LEFT(lc, tnWidth)
+        ENDIF
+        REPLACE (tcField) WITH lc
+    CASE tcType = "N" OR tcType = "F" OR tcType = "B" OR tcType = "Y" OR tcType = "I"
         IF VARTYPE(tuVal) = "N"
             ln = tuVal
         ELSE
@@ -469,10 +368,20 @@ LPARAMETERS tcField, tcType, tnWidth, tnDec, tuVal
         ENDIF
         REPLACE (tcField) WITH ln
     CASE tcType = "D"
+        ld = {}
         IF VARTYPE(tuVal) = "D"
             ld = tuVal
         ELSE
-            ld = ParseDate(TRANSFORM(tuVal))
+            lc = ALLTRIM(TRANSFORM(tuVal))
+            lc = STRTRAN(STRTRAN(lc, "/", "-"), ".", "-")
+            IF LEN(lc) >= 8 AND AT("-", lc) = 0 AND LEN(CHRTRAN(LEFT(lc, 8), "0123456789", "")) = 0
+                lnY = VAL(LEFT(lc, 4))
+                lnM = VAL(SUBSTR(lc, 5, 2))
+                lnD = VAL(RIGHT(LEFT(lc, 8), 2))
+                IF lnY >= 1900 AND lnM >= 1 AND lnM <= 12 AND lnD >= 1 AND lnD <= 31
+                    ld = DATE(lnY, lnM, lnD)
+                ENDIF
+            ENDIF
         ENDIF
         IF !EMPTY(ld)
             REPLACE (tcField) WITH ld
@@ -481,128 +390,3 @@ LPARAMETERS tcField, tcType, tnWidth, tnDec, tuVal
         REPLACE (tcField) WITH INLIST(UPPER(ALLTRIM(TRANSFORM(tuVal))), "T", "Y", "1", ".T.")
     ENDCASE
 ENDPROC
-
-
-FUNCTION ParseDate
-LPARAMETERS tc
-    LOCAL lc, d, m, y, lnAt1, lnAt2
-    lc = ALLTRIM(tc)
-    lc = STRTRAN(lc, "/", "-")
-    lc = STRTRAN(lc, ".", "-")
-    IF LEN(lc) = 8 AND LEN(CHRTRAN(lc, "0123456789", "")) = 0
-        RETURN DATE(VAL(LEFT(lc, 4)), VAL(SUBSTR(lc, 5, 2)), VAL(RIGHT(lc, 2)))
-    ENDIF
-    lnAt1 = AT("-", lc)
-    lnAt2 = RAT("-", lc)
-    IF lnAt1 > 0 AND lnAt2 > lnAt1
-        d = VAL(LEFT(lc, lnAt1 - 1))
-        m = VAL(SUBSTR(lc, lnAt1 + 1, lnAt2 - lnAt1 - 1))
-        y = VAL(SUBSTR(lc, lnAt2 + 1))
-        IF y < 100
-            y = y + 2000
-        ENDIF
-        IF d > 0 AND m > 0 AND y > 0
-            RETURN DATE(y, m, d)
-        ENDIF
-    ENDIF
-    RETURN {}
-ENDFUNC
-
-
-FUNCTION FindAlDbf
-    LOCAL lcRoot, lc
-    lcRoot = ADDBS(GETENV("USERPROFILE")) + "Desktop\092026"
-    lc = FindNamed(lcRoot, "AL082026.DBF")
-    IF !EMPTY(lc)
-        RETURN lc
-    ENDIF
-    RETURN ""
-ENDFUNC
-
-
-FUNCTION FindAlXls
-    LOCAL lcRoot
-    lcRoot = ADDBS(GETENV("USERPROFILE")) + "Desktop\092026"
-    RETURN FindXlsxInFolderDeep(lcRoot)
-ENDFUNC
-
-
-FUNCTION FindNamed
-LPARAMETERS tcRoot, tcName
-    LOCAL la[1], ln, i, lc
-    IF VARTYPE(tcRoot) <> "C" OR EMPTY(tcRoot)
-        RETURN ""
-    ENDIF
-    lc = ADDBS(tcRoot) + tcName
-    IF FILE(lc)
-        RETURN lc
-    ENDIF
-    ln = ADIR(la, ADDBS(tcRoot) + "*.*", "D")
-    IF TYPE("ln") <> "N" OR ln <= 0
-        RETURN ""
-    ENDIF
-    FOR i = 1 TO ln
-        IF la[i, 1] = "." OR la[i, 1] = ".."
-            LOOP
-        ENDIF
-        lc = ADDBS(tcRoot) + ADDBS(la[i, 1]) + tcName
-        IF FILE(lc)
-            RETURN lc
-        ENDIF
-    ENDFOR
-    RETURN ""
-ENDFUNC
-
-
-FUNCTION FindXlsxInFolder
-LPARAMETERS tcFolder
-    LOCAL la[1], ln, i, lcBest, lcFull
-    lcBest = ""
-    IF VARTYPE(tcFolder) <> "C" OR EMPTY(tcFolder)
-        RETURN ""
-    ENDIF
-    ln = ADIR(la, ADDBS(tcFolder) + "*.xlsx")
-    IF TYPE("ln") <> "N" OR ln <= 0
-        ln = ADIR(la, ADDBS(tcFolder) + "*.xls")
-    ENDIF
-    IF TYPE("ln") <> "N" OR ln <= 0
-        RETURN ""
-    ENDIF
-    FOR i = 1 TO ln
-        lcFull = ADDBS(tcFolder) + la[i, 1]
-        IF ATC("8276", la[i, 1]) > 0
-            RETURN lcFull
-        ENDIF
-        IF EMPTY(lcBest)
-            lcBest = lcFull
-        ENDIF
-    ENDFOR
-    RETURN lcBest
-ENDFUNC
-
-
-FUNCTION FindXlsxInFolderDeep
-LPARAMETERS tcRoot
-    LOCAL la[1], ln, i, lc
-    lc = FindXlsxInFolder(tcRoot)
-    IF !EMPTY(lc)
-        RETURN lc
-    ENDIF
-    IF VARTYPE(tcRoot) <> "C" OR EMPTY(tcRoot)
-        RETURN ""
-    ENDIF
-    ln = ADIR(la, ADDBS(tcRoot) + "*.*", "D")
-    IF TYPE("ln") <> "N" OR ln <= 0
-        RETURN ""
-    ENDIF
-    FOR i = 1 TO ln
-        IF la[i, 1] = "." OR la[i, 1] = ".."
-            LOOP
-        ENDIF
-        lc = FindXlsxInFolder(ADDBS(tcRoot) + la[i, 1])
-        IF !EMPTY(lc)
-            RETURN lc
-        ENDIF
-    ENDFOR
-    RETURN ""
-ENDFUNC
