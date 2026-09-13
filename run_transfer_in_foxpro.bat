@@ -15,12 +15,17 @@ set "DEST3=%USERPROFILE%\Desktop\092026"
 
 copy /Y "%~dp0transfer_alawat.prg" "%DEST1%\transfer_alawat.prg" >nul 2>&1
 copy /Y "%~dp0transfer_alawat.prg" "%DEST3%\transfer_alawat.prg" >nul 2>&1
+copy /Y "%~dp0transfer_alawat.prg" "%USERPROFILE%\Downloads\transfer_alawat.prg" >nul 2>&1
+copy /Y "%~dp0transfer_alawat.prg" "C:\Users\ngc\Downloads\transfer_alawat.prg" >nul 2>&1
 
+echo تم النسخ إلى:
+echo %USERPROFILE%\Downloads\transfer_alawat.prg
+echo.
 echo 1. ابق داخل نفس نافذة Visual FoxPro
 echo 2. اغلق نافذة BROWSE إن كانت مفتوحة
 echo 3. في نافذة Command اكتب هذا السطر ثم Enter:
 echo.
-echo DO "%~dp0transfer_alawat.prg"
+echo DO "%USERPROFILE%\Downloads\transfer_alawat.prg"
 echo.
 echo بعد التنفيذ يجب أن يظهر:
 echo 126 records
