@@ -25,6 +25,10 @@ if errorlevel 1 (
   set "PY=python"
 )
 
+echo أغلق Visual FoxPro تماماً قبل المتابعة.
+echo الجدول الآن فيه 222 قيداً قديماً، والمطلوب 126 من Excel.
+echo.
+
 echo تثبيت المكتبات المطلوبة...
 %PY% -m pip install --quiet openpyxl
 if errorlevel 1 (
@@ -52,11 +56,11 @@ if errorlevel 1 (
 )
 
 echo.
-echo 2^) التنفيذ: تفريغ الجدول ثم النقل مع نسخة احتياطية...
+echo 2^) التنفيذ: تفريغ 222 ثم نقل 126 قيداً فقط...
 if exist "%DBF%" if exist "%EXCEL%" (
-  %PY% "%~dp0transfer_excel_to_al_dbf.py" --excel "%EXCEL%" --dbf "%DBF%"
+  %PY% "%~dp0transfer_excel_to_al_dbf.py" --excel "%EXCEL%" --dbf "%DBF%" --expected-count 126
 ) else (
-  %PY% "%~dp0transfer_excel_to_al_dbf.py"
+  %PY% "%~dp0transfer_excel_to_al_dbf.py" --expected-count 126
 )
 if errorlevel 1 (
   pause
@@ -64,5 +68,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo اكتمل النقل.
+echo اكتمل النقل. افتح الجدول في الفوكس ثم نفّذ:
+echo SET FILTER TO
+echo COUNT
+echo يجب أن يظهر: 126 records
 pause

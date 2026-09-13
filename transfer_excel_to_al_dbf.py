@@ -441,10 +441,50 @@ def extract_filename_hints(excel_path: Path) -> Dict[str, Any]:
     return hints
 
 
+def sanitize_emp_no(value: Any) -> str:
+    text = cell_to_text(value)
+    if re.fullmatch(r"\d+\.0+", text):
+        text = text.split(".", 1)[0]
+    return text.strip()
+
+
+def pick_key_field(mapping: Dict[int, str]) -> Optional[str]:
+    names = list(mapping.values())
+    pno_keys = {normalize_key(a) for a in FIELD_ALIASES["PNO"]}
+    pno_keys.add("PNO")
+    for name in names:
+        if normalize_key(name) == "PNO":
+            return name
+    for name in names:
+        if normalize_key(name) in pno_keys:
+            return name
+    return names[0] if names else None
+
+
+def row_key_value(row: Sequence[Any], mapping: Dict[int, str], key_field: str) -> str:
+    for idx, name in mapping.items():
+        if name == key_field:
+            return sanitize_emp_no(row[idx] if idx < len(row) else None)
+    return ""
+
+
+def assert_dbf_writable(path: Path) -> None:
+    try:
+        with path.open("r+b") as f:
+            f.seek(0)
+            f.read(1)
+    except PermissionError as exc:
+        raise PermissionError(
+            "ملف الفوكس مفتوح. أغلق Visual FoxPro تماماً ثم أعد التشغيل. "
+            "لذلك بقي العدد القديم 222."
+        ) from exc
+
+
 def map_and_build_rows(
     excel_path: Path,
     meta: DbfMeta,
     encoding: str,
+    expected_count: Optional[int] = None,
 ) -> Tuple[List[bytes], Dict[str, Any]]:
     first, rest, sheet = load_excel_table(excel_path)
     preview = [first] + rest[:14]
@@ -495,23 +535,56 @@ def map_and_build_rows(
         elif key in ("AMER", "AMR", "ORDER", "ORDNO", "NOAMR") and "AMER" in hints:
             hint_values[field.name] = hints["AMER"]
 
+    key_field = pick_key_field(mapping)
     records: List[bytes] = []
     skipped = 0
+    started = False
+    blank_run = 0
+    extra_after_expected = 0
+
     for row in data_rows:
         if row is None:
             skipped += 1
+            blank_run += 1
+            if started and blank_run >= 2:
+                break
             continue
         if all(c is None or str(c).strip() == "" for c in row):
             skipped += 1
+            blank_run += 1
+            if started and blank_run >= 2:
+                break
             continue
+
+        key_val = row_key_value(row, mapping, key_field) if key_field else ""
+        if key_field and not key_val:
+            skipped += 1
+            blank_run += 1
+            if started and blank_run >= 3:
+                break
+            continue
+
+        blank_run = 0
+        started = True
+        if expected_count is not None and len(records) >= expected_count:
+            extra_after_expected += 1
+            continue
+
         values: Dict[str, Any] = dict(hint_values)
         for idx, field_name in mapping.items():
             values[field_name] = row[idx] if idx < len(row) else None
-        # تجاهل صفوف بلا أي قيمة مفيدة
-        if not any(cell_to_text(v) for v in values.values()):
+        if key_field and not cell_to_text(values.get(key_field)):
             skipped += 1
             continue
         records.append(build_record(meta, values, encoding))
+
+    if expected_count is not None:
+        if len(records) < expected_count:
+            raise ValueError(
+                f"عدد القيود المستوردة {len(records)} أقل من المطلوب {expected_count}"
+            )
+        if extra_after_expected:
+            print("تم تجاهل صفوف إضافية بعد العدد المطلوب:", extra_after_expected)
 
     report = {
         "sheet": sheet,
@@ -522,6 +595,10 @@ def map_and_build_rows(
         "inserted": len(records),
         "skipped": skipped,
         "header_row": header_idx + 1,
+        "key_field": key_field,
+        "excel_data_rows": len(data_rows),
+        "extra_after_expected": extra_after_expected,
+        "expected_count": expected_count,
     }
     return records, report
 
@@ -641,6 +718,15 @@ def inspect(excel_path: Path, dbf_path: Path) -> None:
         print("الحقول:")
         for f in meta.fields:
             print(f"  {f.name:10} {f.type}({f.length},{f.decimal})")
+        if excel_path.exists():
+            try:
+                _recs, report = map_and_build_rows(excel_path, meta, enc, expected_count=None)
+                print("قيود Excel الصالحة للنقل:", report["inserted"])
+                print("سجلات الفوكس الحالية:", meta.record_count)
+                if report["inserted"] != meta.record_count:
+                    print("تنبيه: العددان غير متطابقين. بعد النقل يجب أن يصبح الفوكس:", report["inserted"])
+            except Exception as exc:
+                print("تعذر عد قيود Excel:", exc)
         for rec in list(iter_records(dbf_path, meta))[:2]:
             sample = {}
             for f in meta.fields:
@@ -667,6 +753,7 @@ def transfer(
     dbf_path: Path,
     encoding_forced: Optional[str] = None,
     dry_run: bool = False,
+    expected_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     if not excel_path.exists():
         raise FileNotFoundError(f"ملف Excel غير موجود: {excel_path}")
@@ -676,7 +763,9 @@ def transfer(
     meta = read_dbf_meta(dbf_path)
     encoding = detect_encoding(dbf_path, meta, encoding_forced)
     original_sig = structure_signature(meta.header)
-    records, report = map_and_build_rows(excel_path, meta, encoding)
+    records, report = map_and_build_rows(
+        excel_path, meta, encoding, expected_count=expected_count
+    )
     if not records:
         raise ValueError("لا توجد صفوف قابلة للنقل من Excel")
 
@@ -694,14 +783,18 @@ def transfer(
     print("مطابقة موضعية:", "نعم" if report["positional"] else "لا")
     if report["hints"]:
         print("قيم من اسم الملف:", report["hints"])
-    print("سجلات قديمة:", meta.record_count)
-    print("سجلات جديدة:", report["inserted"])
+    print("سجلات قديمة في الفوكس:", meta.record_count)
+    print("قيود Excel بعد العنوان:", report["inserted"])
     print("صفوف متجاوزة:", report["skipped"])
+    print("حقل المفتاح:", report.get("key_field"))
+    if expected_count is not None:
+        print("العدد المطلوب:", expected_count)
 
     if dry_run:
         print("وضع التجربة: لم يُكتب شيء.")
         return report
 
+    assert_dbf_writable(dbf_path)
     backup = backup_files(dbf_path)
     print("نسخة احتياطية:")
     print(str(backup))
@@ -731,7 +824,15 @@ def transfer(
     report["new_count"] = final.record_count
     print("-" * 60)
     print("تم التفريغ ثم النقل.")
-    print("السجلات الآن:", final.record_count)
+    print("عدد الفوكس قبل:", meta.record_count)
+    print("عدد الفوكس بعد:", final.record_count)
+    print("عدد قيود Excel المنقولة:", report["inserted"])
+    if final.record_count != report["inserted"]:
+        raise RuntimeError("عدد الفوكس لا يساوي عدد قيود Excel")
+    if expected_count is not None and final.record_count != expected_count:
+        raise RuntimeError(
+            f"العدد بعد النقل {final.record_count} وليس {expected_count}"
+        )
     print("الهيكل كما هو، والترميز كما في الجدول الأصلي.")
     return report
 
@@ -744,9 +845,11 @@ def write_report(excel_path: Path, dbf_path: Path, report: Dict[str, Any]) -> Pa
         f"Excel: {excel_path}",
         f"DBF: {dbf_path}",
         f"الترميز: {report.get('encoding', '')}",
-        f"سجلات قديمة: {report.get('old_count', '')}",
-        f"سجلات جديدة: {report.get('new_count', report.get('inserted', ''))}",
+        f"سجلات قديمة في الفوكس: {report.get('old_count', '')}",
+        f"سجلات جديدة في الفوكس: {report.get('new_count', report.get('inserted', ''))}",
+        f"العدد المطلوب: {report.get('expected_count', '')}",
         f"صفوف متجاوزة: {report.get('skipped', '')}",
+        f"حقل المفتاح: {report.get('key_field', '')}",
         f"صف العناوين: {report.get('header_row', '')}",
         f"مطابقة الأعمدة: {report.get('mapping', '')}",
         f"قيم إضافية: {report.get('hints', '')}",
@@ -811,6 +914,9 @@ def make_test_excel(path: Path) -> None:
     ws.append(["100045", "ابراهيم حمود عبد محمد", 125000])
     ws.append(["110176", "ابراهيم محمد عابد عبود", 98000.5])
     ws.append([None, None, None])
+    ws.append([None, None, None])
+    for i in range(96):
+        ws.append([str(800000 + i), "قيد قديم فائض", 1])
     wb.save(path)
 
 
@@ -852,6 +958,25 @@ def self_test(base: Optional[Path] = None) -> int:
     assert "100045" in pnos
     assert "ابراهيم حمود عبد محمد" in names
     print("SELF-TEST OK", report["inserted"], names)
+
+    # صفوف قديمة متصلة بدون فراغ: لا تُؤخذ أكثر من العدد المطلوب
+    excel2 = base / "extra.xlsx"
+    dbf2 = base / "AL2.DBF"
+    make_test_dbf(dbf2, [("999999", "قديم", 1)] * 222, ldid=0)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["رقم الموظف", "الاسم", "المبلغ"])
+    ws.append(["100045", "ابراهيم حمود عبد محمد", 125000])
+    ws.append(["110176", "ابراهيم محمد عابد عبود", 98000.5])
+    for i in range(220):
+        ws.append([str(700000 + i), "فائض", 1])
+    wb.save(excel2)
+    report2 = transfer(excel2, dbf2, expected_count=2)
+    after2 = read_dbf_meta(dbf2)
+    assert after2.record_count == 2, after2.record_count
+    assert report2["extra_after_expected"] == 220
+    print("COUNT-LIMIT OK", after2.record_count, "from old", 222)
+
     if tmp is not None:
         tmp.cleanup()
     return 0
@@ -862,6 +987,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--excel", default=None, help="مسار ملف Excel")
     p.add_argument("--dbf", default=None, help="مسار AL082026.DBF")
     p.add_argument("--encoding", default=None, help="فرض ترميز مثل cp1256")
+    p.add_argument("--expected-count", type=int, default=None, help="عدد القيود المطلوب مثل 126")
     p.add_argument("--inspect-only", action="store_true", help="عرض البنية فقط")
     p.add_argument("--dry-run", action="store_true", help="تجربة بدون كتابة")
     p.add_argument("--self-test", action="store_true", help="اختبار ذاتي بملفات مؤقتة")
@@ -893,6 +1019,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             dbf_path=dbf_path,
             encoding_forced=args.encoding,
             dry_run=args.dry_run,
+            expected_count=args.expected_count,
         )
         if not args.dry_run:
             out = write_report(excel_path, dbf_path, report)
