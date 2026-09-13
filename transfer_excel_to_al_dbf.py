@@ -56,9 +56,34 @@ FIELD_ALIASES: Dict[str, Sequence[str]] = {
         "name", "ename", "aname", "empname", "fullname",
         "الاسم", "اسم", "اسمالموظف", "الاسمالثلاثي", "الاسمالرباعي",
     ),
-    "AMT": (
-        "amt", "amount", "allw", "allow", "alawa", "sal", "value", "val", "mony", "money",
-        "المبلغ", "مبلغ", "العلاوه", "العلاوة", "علاوه", "علاوة", "المخصص", "القيمه", "القيمة",
+    "MONEYCOM": (
+        "moneycom", "money", "amt", "amount", "allw",
+        "المبلغ", "مبلغ", "العلاوه", "العلاوة", "علاوه", "علاوة",
+    ),
+    "MONEYPOST": (
+        "moneypost", "post", "net",
+        "الصافي", "صافي", "المبلغ2",
+    ),
+    "TESTDN": (
+        "testdn", "date", "dt",
+        "التاريخ", "تاريخ",
+    ),
+    "DAT_NU": (
+        "dat_nu", "datnu", "date",
+        "التاريخ", "تاريخ",
+    ),
+    "MO": (
+        "mo", "month", "mm", "شهر",
+    ),
+    "FRK": (
+        "frk", "diff", "فرق",
+    ),
+    "BAS": (
+        "bas", "basic", "اساس", "الأساس",
+    ),
+    "NO": (
+        "amer", "order", "ordno",
+        "الامر", "الأمر", "رقمالأمر",
     ),
     "ALLW": (
         "allw", "allow", "alawa", "amt", "amount",

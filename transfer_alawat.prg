@@ -9,8 +9,9 @@ LOCAL loExcel, loBook, loSheet, llExcelOk
 LOCAL lnHeader, lnCols, lnRow, lnLast, lnIns, lnBlank
 LOCAL lnFCount, i, lnCol, lcField, lcHdr, lcKey, lcVal, lcType
 LOCAL lnPnoCol, lnMapped, lnF, lnWidth, lnDec
+LOCAL lnNameCol, lnExcelNums, lnUsedNum, lnDateNums, lnUsedDate
 LOCAL luVal, ldDate, lcAmer
-LOCAL laFields[1], laCol[1]
+LOCAL laFields[1], laCol[1], laExcelNum[1], laExcelDate[1]
 
 lnWanted = 126
 lcAmer = "8276"
@@ -127,18 +128,66 @@ IF lnPnoCol = 0
         ENDIF
     ENDFOR
 ENDIF
-IF lnMapped = 0 AND lnCols = lnFCount
+
+* Excel headers are often Arabic, so detect Name/Money/Date from the data.
+lnNameCol = 0
+FOR i = 1 TO lnFCount
+    IF UPPER(ALLTRIM(laFields[i, 1])) == "NAME" AND laCol[i] > 0
+        lnNameCol = laCol[i]
+    ENDIF
+ENDFOR
+IF lnNameCol = 0
+    lnNameCol = DetectNameCol(loSheet, lnHeader + 1, lnLast, lnCols, lnPnoCol)
     FOR i = 1 TO lnFCount
-        laCol[i] = i
-    ENDFOR
-ENDIF
-IF lnPnoCol = 0
-    FOR i = 1 TO lnFCount
-        IF UPPER(ALLTRIM(laFields[i, 1])) == "PNO"
-            lnPnoCol = laCol[i]
+        IF UPPER(ALLTRIM(laFields[i, 1])) == "NAME"
+            laCol[i] = lnNameCol
         ENDIF
     ENDFOR
 ENDIF
+
+lnExcelNums = 0
+lnDateNums = 0
+FOR lnCol = 1 TO lnCols
+    IF lnCol = lnPnoCol OR lnCol = lnNameCol
+        LOOP
+    ENDIF
+    IF LooksLikeDateCol(loSheet, lnHeader + 1, lnLast, lnCol)
+        lnDateNums = lnDateNums + 1
+        DIMENSION laExcelDate[lnDateNums]
+        laExcelDate[lnDateNums] = lnCol
+        LOOP
+    ENDIF
+    IF LooksLikeAmountCol(loSheet, lnHeader + 1, lnLast, lnCol)
+        lnExcelNums = lnExcelNums + 1
+        DIMENSION laExcelNum[lnExcelNums]
+        laExcelNum[lnExcelNums] = lnCol
+    ENDIF
+ENDFOR
+
+lnUsedNum = 0
+lnUsedDate = 0
+FOR i = 1 TO lnFCount
+    IF laCol[i] > 0
+        LOOP
+    ENDIF
+    lcField = UPPER(ALLTRIM(laFields[i, 1]))
+    lcType = UPPER(laFields[i, 2])
+    IF INLIST(lcField, "MONEYCOM", "MONEYPOST", "FRK", "BAS", "AMT", "ALLW") ;
+            OR (lcType $ "NFY" AND laFields[i, 3] >= 7 AND !INLIST(lcField, "PNO", "MO", "NO"))
+        lnUsedNum = lnUsedNum + 1
+        IF lnUsedNum <= lnExcelNums
+            laCol[i] = laExcelNum[lnUsedNum]
+        ENDIF
+    ENDIF
+    IF INLIST(lcField, "TESTDN", "DAT_NU", "DT", "DATE", "FDATE") OR lcType = "D"
+        IF laCol[i] = 0
+            lnUsedDate = lnUsedDate + 1
+            IF lnUsedDate <= lnDateNums
+                laCol[i] = laExcelDate[lnUsedDate]
+            ENDIF
+        ENDIF
+    ENDIF
+ENDFOR
 
 lnIns = 0
 lnBlank = 0
@@ -171,16 +220,18 @@ FOR lnRow = lnHeader + 1 TO lnLast
         IF laCol[i] > 0
             lcVal = CellText(loSheet, lnRow, laCol[i])
         ELSE
-            IF INLIST(UPPER(lcField), "AMER", "AMR", "ORDER", "ORDNO", "NOAMR")
+            lcVal = ""
+        ENDIF
+        IF EMPTY(lcVal)
+            DO CASE
+            CASE INLIST(UPPER(lcField), "AMER", "AMR", "ORDER", "ORDNO", "NOAMR", "NO")
                 lcVal = lcAmer
-            ENDIF
-            IF INLIST(UPPER(lcField), "DT", "DATE", "FDATE")
+            CASE UPPER(lcField) = "MO"
+                lcVal = "8"
+            CASE INLIST(UPPER(lcField), "TESTDN", "DAT_NU", "DT", "DATE", "FDATE") OR lcType = "D"
                 PutField(lcField, lcType, lnWidth, lnDec, ldDate)
                 LOOP
-            ENDIF
-        ENDIF
-        IF EMPTY(lcVal) AND INLIST(UPPER(lcField), "AMER", "AMR", "ORDER", "ORDNO", "NOAMR")
-            lcVal = lcAmer
+            ENDCASE
         ENDIF
         PutField(lcField, lcType, lnWidth, lnDec, lcVal)
     ENDFOR
@@ -210,6 +261,7 @@ SET TALK OFF
 MESSAGEBOX("Old count: " + TRANSFORM(lnOld) + CHR(13) + ;
     "New count: " + TRANSFORM(lnNew) + CHR(13) + ;
     "Excel rows loaded: " + TRANSFORM(lnIns) + CHR(13) + ;
+    "PNO col: " + TRANSFORM(lnPnoCol) + "  Name col: " + TRANSFORM(lnNameCol) + CHR(13) + ;
     "Required: 126")
 
 RETURN
@@ -261,8 +313,14 @@ LPARAMETERS tcField, tcHdr
         RETURN INLIST(tcHdr, "PNO", "EMPNO", "EMPNO", "NO", "NUM", "NUMBER", "ID", "CODE")
     CASE tcField = "NAME"
         RETURN INLIST(tcHdr, "NAME", "ENAME", "ANAME", "EMPNAME", "FULLNAME")
-    CASE INLIST(tcField, "AMT", "ALLW")
-        RETURN INLIST(tcHdr, "AMT", "AMOUNT", "ALLW", "ALLOW", "ALAWA", "SAL", "VALUE", "VAL")
+    CASE INLIST(tcField, "AMT", "ALLW", "MONEYCOM", "MONEYPOST")
+        RETURN INLIST(tcHdr, "AMT", "AMOUNT", "ALLW", "ALLOW", "ALAWA", "SAL", "VALUE", "VAL", "MONEY", "MONEYCOM", "MONEYPOST")
+    CASE tcField = "MO"
+        RETURN INLIST(tcHdr, "MO", "MONTH", "MM")
+    CASE INLIST(tcField, "FRK", "BAS")
+        RETURN INLIST(tcHdr, "FRK", "BAS", "BASIC", "DIFF")
+    CASE INLIST(tcField, "TESTDN", "DAT_NU", "DT", "DATE", "FDATE")
+        RETURN INLIST(tcHdr, "DT", "DATE", "FDATE", "HDATE", "TESTDN", "DAT_NU", "DATNU")
     CASE INLIST(tcField, "TYPE", "TYP")
         RETURN INLIST(tcHdr, "TYPE", "TYP", "KIND", "CLASS")
     CASE INLIST(tcField, "AMER", "AMR", "ORDER", "ORDNO", "NOAMR")
@@ -316,6 +374,67 @@ LPARAMETERS toSheet, tnFrom, tnTo, tnCols
         ENDIF
     ENDFOR
     RETURN lnBestCol
+ENDFUNC
+
+
+FUNCTION DetectNameCol
+LPARAMETERS toSheet, tnFrom, tnTo, tnCols, tnPnoCol
+    LOCAL lnCol, lnRow, lnBest, lnBestCol, lnHits, lc
+    lnBest = 0
+    lnBestCol = 0
+    FOR lnCol = 1 TO tnCols
+        IF lnCol = tnPnoCol
+            LOOP
+        ENDIF
+        lnHits = 0
+        FOR lnRow = tnFrom TO MIN(tnFrom + 25, tnTo)
+            lc = ALLTRIM(CellText(toSheet, lnRow, lnCol))
+            IF LEN(lc) >= 4 AND LEN(CHRTRAN(lc, "0123456789 .,-/", "")) > 2
+                lnHits = lnHits + 1
+            ENDIF
+        ENDFOR
+        IF lnHits > lnBest
+            lnBest = lnHits
+            lnBestCol = lnCol
+        ENDIF
+    ENDFOR
+    IF lnBestCol = 0 AND tnPnoCol > 0 AND tnPnoCol < tnCols
+        lnBestCol = tnPnoCol + 1
+    ENDIF
+    RETURN lnBestCol
+ENDFUNC
+
+
+FUNCTION LooksLikeAmountCol
+LPARAMETERS toSheet, tnFrom, tnTo, tnCol
+    LOCAL lnRow, lnHits, lc, lu
+    lnHits = 0
+    FOR lnRow = tnFrom TO MIN(tnFrom + 25, tnTo)
+        lu = toSheet.Cells(lnRow, tnCol).Value
+        IF VARTYPE(lu) = "N"
+            lnHits = lnHits + 1
+            LOOP
+        ENDIF
+        lc = ALLTRIM(CellText(toSheet, lnRow, tnCol))
+        IF !EMPTY(lc) AND VAL(CHRTRAN(lc, ",", "")) <> 0
+            lnHits = lnHits + 1
+        ENDIF
+    ENDFOR
+    RETURN lnHits >= 3
+ENDFUNC
+
+
+FUNCTION LooksLikeDateCol
+LPARAMETERS toSheet, tnFrom, tnTo, tnCol
+    LOCAL lnRow, lnHits, lu
+    lnHits = 0
+    FOR lnRow = tnFrom TO MIN(tnFrom + 20, tnTo)
+        lu = toSheet.Cells(lnRow, tnCol).Value
+        IF VARTYPE(lu) = "D" OR VARTYPE(lu) = "T"
+            lnHits = lnHits + 1
+        ENDIF
+    ENDFOR
+    RETURN lnHits >= 3
 ENDFUNC
 
 
