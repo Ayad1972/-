@@ -794,7 +794,35 @@ def transfer(
         print("وضع التجربة: لم يُكتب شيء.")
         return report
 
-    assert_dbf_writable(dbf_path)
+    locked = False
+    try:
+        assert_dbf_writable(dbf_path)
+    except PermissionError:
+        locked = True
+
+    if locked:
+        sidecar = dbf_path.with_name("AL082026_NEW.DBF")
+        print("الملف مفتوح في Visual FoxPro لذلك لا يمكن تفريغ 222 من بايثون.")
+        print("تم إنشاء ملف جديد بنفس الهيكل:")
+        print(str(sidecar))
+        write_records(sidecar, meta, records)
+        report["backup"] = ""
+        report["encoding"] = encoding
+        report["old_count"] = meta.record_count
+        report["new_count"] = len(records)
+        report["sidecar"] = str(sidecar)
+        print("من نافذة Command داخل نفس فوكس برو نفّذ:")
+        print("DO transfer_alawat.prg")
+        print("أو:")
+        print("SELECT AL082026")
+        print("USE")
+        print("USE AL082026 EXCLUSIVE")
+        print("ZAP")
+        print("APPEND FROM AL082026_NEW")
+        print("COUNT")
+        print("يجب أن يظهر 126")
+        return report
+
     backup = backup_files(dbf_path)
     print("نسخة احتياطية:")
     print(str(backup))
@@ -976,6 +1004,20 @@ def self_test(base: Optional[Path] = None) -> int:
     assert after2.record_count == 2, after2.record_count
     assert report2["extra_after_expected"] == 220
     print("COUNT-LIMIT OK", after2.record_count, "from old", 222)
+
+    dbf3 = base / "LOCK.DBF"
+    make_test_dbf(dbf3, [("999999", "قديم", 1)], ldid=0)
+    os.chmod(dbf3, 0o444)
+    try:
+        report3 = transfer(excel_path, dbf3, expected_count=2)
+        sidecar = dbf3.with_name("AL082026_NEW.DBF")
+        assert sidecar.exists(), "sidecar missing"
+        meta_side = read_dbf_meta(sidecar)
+        assert meta_side.record_count == 2, meta_side.record_count
+        assert read_dbf_meta(dbf3).record_count == 1
+        print("SIDECAR-WHEN-LOCKED OK", meta_side.record_count)
+    finally:
+        os.chmod(dbf3, 0o644)
 
     if tmp is not None:
         tmp.cleanup()

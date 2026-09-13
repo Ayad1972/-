@@ -25,8 +25,11 @@ if errorlevel 1 (
   set "PY=python"
 )
 
-echo أغلق Visual FoxPro تماماً قبل المتابعة.
-echo الجدول الآن فيه 222 قيداً قديماً، والمطلوب 126 من Excel.
+echo أغلق نافذة BROWSE فقط، وابق داخل Visual FoxPro.
+echo الحل الصحيح: نفّذ من نافذة Command:
+echo   DO "%~dp0transfer_alawat.prg"
+echo.
+echo بايثون لا يفرّغ الجدول إذا كان فوكس برو فاتحاً لذلك بقي 222.
 echo.
 
 echo تثبيت المكتبات المطلوبة...
