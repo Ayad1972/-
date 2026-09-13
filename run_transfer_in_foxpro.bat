@@ -21,11 +21,10 @@ copy /Y "%~dp0transfer_alawat.prg" "C:\Users\ngc\Downloads\transfer_alawat.prg" 
 echo تم النسخ إلى:
 echo %USERPROFILE%\Downloads\transfer_alawat.prg
 echo.
-echo 1. ابق داخل نفس نافذة Visual FoxPro
-echo 2. اغلق نافذة BROWSE إن كانت مفتوحة
-echo 3. في نافذة Command اكتب هذا السطر ثم Enter:
+echo لا تكتب: DO transfer_alawat.prg
+echo اكتب هذا السطر كاملا:
 echo.
-echo DO "%USERPROFILE%\Downloads\transfer_alawat.prg"
+echo DO C:\Users\ngc\Downloads\transfer_alawat.prg
 echo.
 echo بعد التنفيذ يجب أن يظهر:
 echo 126 records
