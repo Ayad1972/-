@@ -25,13 +25,28 @@ SET EXACT OFF
 SET DELETED ON
 SET CONFIRM OFF
 
-lcDbf = FindAlDbf()
-lcXls = FindAlXls()
+lcDbf = ""
+lcXls = ""
+IF USED("AL082026")
+    lcDbf = DBF("AL082026")
+ENDIF
+IF EMPTY(lcDbf) AND !EMPTY(ALIAS()) AND ATC("AL082026", DBF()) > 0
+    lcDbf = DBF()
+ENDIF
 IF EMPTY(lcDbf)
-    lcDbf = GETFILE("DBF", "AL082026.DBF")
+    lcDbf = FindAlDbf()
+ENDIF
+IF !EMPTY(lcDbf)
+    lcXls = FindXlsxInFolder(LEFT(lcDbf, RAT("\", lcDbf)))
 ENDIF
 IF EMPTY(lcXls)
-    lcXls = GETFILE("XLSX", "Excel")
+    lcXls = FindAlXls()
+ENDIF
+IF EMPTY(lcDbf)
+    lcDbf = GETFILE("DBF")
+ENDIF
+IF EMPTY(lcXls)
+    lcXls = GETFILE("XLSX")
 ENDIF
 IF EMPTY(lcDbf) OR !FILE(lcDbf)
     MESSAGEBOX("AL082026.DBF not found")
@@ -501,80 +516,93 @@ FUNCTION FindAlDbf
     IF !EMPTY(lc)
         RETURN lc
     ENDIF
-    RETURN FindNamed(ADDBS(GETENV("USERPROFILE")) + "Desktop", "AL082026.DBF")
+    RETURN ""
 ENDFUNC
 
 
 FUNCTION FindAlXls
-    LOCAL lcRoot, lc
+    LOCAL lcRoot
     lcRoot = ADDBS(GETENV("USERPROFILE")) + "Desktop\092026"
-    lc = FindXlsxPref(lcRoot)
-    IF !EMPTY(lc)
-        RETURN lc
-    ENDIF
-    RETURN FindXlsxPref(ADDBS(GETENV("USERPROFILE")) + "Desktop")
+    RETURN FindXlsxInFolderDeep(lcRoot)
 ENDFUNC
 
 
 FUNCTION FindNamed
 LPARAMETERS tcRoot, tcName
     LOCAL la[1], ln, i, lc
-    IF EMPTY(tcRoot) OR !DIRECTORY(tcRoot)
+    IF VARTYPE(tcRoot) <> "C" OR EMPTY(tcRoot)
         RETURN ""
     ENDIF
-    IF FILE(ADDBS(tcRoot) + tcName)
-        RETURN ADDBS(tcRoot) + tcName
+    lc = ADDBS(tcRoot) + tcName
+    IF FILE(lc)
+        RETURN lc
     ENDIF
     ln = ADIR(la, ADDBS(tcRoot) + "*.*", "D")
+    IF TYPE("ln") <> "N" OR ln <= 0
+        RETURN ""
+    ENDIF
     FOR i = 1 TO ln
         IF la[i, 1] = "." OR la[i, 1] = ".."
             LOOP
         ENDIF
-        IF "D" $ la[i, 5]
-            lc = FindNamed(ADDBS(tcRoot) + la[i, 1], tcName)
-            IF !EMPTY(lc)
-                RETURN lc
-            ENDIF
+        lc = ADDBS(tcRoot) + ADDBS(la[i, 1]) + tcName
+        IF FILE(lc)
+            RETURN lc
         ENDIF
     ENDFOR
     RETURN ""
 ENDFUNC
 
 
-FUNCTION FindXlsxPref
-LPARAMETERS tcRoot
-    LOCAL la[1], ln, i, lc, lcBest, lcName
+FUNCTION FindXlsxInFolder
+LPARAMETERS tcFolder
+    LOCAL la[1], ln, i, lcBest, lcFull
     lcBest = ""
-    IF EMPTY(tcRoot) OR !DIRECTORY(tcRoot)
+    IF VARTYPE(tcFolder) <> "C" OR EMPTY(tcFolder)
         RETURN ""
     ENDIF
-    ln = ADIR(la, ADDBS(tcRoot) + "*.xlsx")
+    ln = ADIR(la, ADDBS(tcFolder) + "*.xlsx")
+    IF TYPE("ln") <> "N" OR ln <= 0
+        ln = ADIR(la, ADDBS(tcFolder) + "*.xls")
+    ENDIF
+    IF TYPE("ln") <> "N" OR ln <= 0
+        RETURN ""
+    ENDIF
     FOR i = 1 TO ln
-        lcName = UPPER(la[i, 1])
-        lc = ADDBS(tcRoot) + la[i, 1]
-        IF "8276" $ lcName
-            RETURN lc
+        lcFull = ADDBS(tcFolder) + la[i, 1]
+        IF ATC("8276", la[i, 1]) > 0
+            RETURN lcFull
         ENDIF
         IF EMPTY(lcBest)
-            lcBest = lc
+            lcBest = lcFull
         ENDIF
     ENDFOR
+    RETURN lcBest
+ENDFUNC
+
+
+FUNCTION FindXlsxInFolderDeep
+LPARAMETERS tcRoot
+    LOCAL la[1], ln, i, lc
+    lc = FindXlsxInFolder(tcRoot)
+    IF !EMPTY(lc)
+        RETURN lc
+    ENDIF
+    IF VARTYPE(tcRoot) <> "C" OR EMPTY(tcRoot)
+        RETURN ""
+    ENDIF
     ln = ADIR(la, ADDBS(tcRoot) + "*.*", "D")
+    IF TYPE("ln") <> "N" OR ln <= 0
+        RETURN ""
+    ENDIF
     FOR i = 1 TO ln
         IF la[i, 1] = "." OR la[i, 1] = ".."
             LOOP
         ENDIF
-        IF "D" $ la[i, 5]
-            lc = FindXlsxPref(ADDBS(tcRoot) + la[i, 1])
-            IF !EMPTY(lc)
-                IF "8276" $ UPPER(JUSTFNAME(lc))
-                    RETURN lc
-                ENDIF
-                IF EMPTY(lcBest)
-                    lcBest = lc
-                ENDIF
-            ENDIF
+        lc = FindXlsxInFolder(ADDBS(tcRoot) + la[i, 1])
+        IF !EMPTY(lc)
+            RETURN lc
         ENDIF
     ENDFOR
-    RETURN lcBest
+    RETURN ""
 ENDFUNC
