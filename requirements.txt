@@ -6,3 +6,5 @@ arabic-reshaper>=3.0.0
 python-bidi>=0.4.2
 pymupdf>=1.24.0
 pypdf>=4.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
